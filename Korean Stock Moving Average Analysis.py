@@ -271,6 +271,126 @@ def create_returns_chart(data):
     
     return fig
 
+def create_stability_charts(stability_results):
+    """안정성 분석 결과 차트 생성"""
+    if stability_results.empty:
+        return None, None, None, None
+    
+    # 1. 안정성 점수 분포 히스토그램
+    fig1 = go.Figure()
+    fig1.add_trace(go.Histogram(
+        x=stability_results['stability_score'],
+        nbinsx=30,
+        name='안정성 점수 분포',
+        marker_color='lightblue',
+        opacity=0.7
+    ))
+    fig1.update_layout(
+        title="안정성 점수 분포",
+        xaxis_title="안정성 점수",
+        yaxis_title="빈도",
+        height=400
+    )
+    
+    # 2. 이동평균 기간별 평균 안정성 점수
+    ma_grouped = stability_results.groupby('ma_period')['stability_score'].mean().reset_index()
+    fig2 = go.Figure()
+    fig2.add_trace(go.Scatter(
+        x=ma_grouped['ma_period'],
+        y=ma_grouped['stability_score'],
+        mode='lines+markers',
+        name='평균 안정성 점수',
+        line=dict(color='green', width=2),
+        marker=dict(size=6)
+    ))
+    fig2.update_layout(
+        title="이동평균 기간별 평균 안정성 점수",
+        xaxis_title="이동평균 기간 (일)",
+        yaxis_title="평균 안정성 점수",
+        height=400
+    )
+    
+    # 3. 분석 기간별 평균 안정성 점수
+    period_grouped = stability_results.groupby('analysis_days')['stability_score'].mean().reset_index()
+    fig3 = go.Figure()
+    fig3.add_trace(go.Scatter(
+        x=period_grouped['analysis_days'],
+        y=period_grouped['stability_score'],
+        mode='lines+markers',
+        name='평균 안정성 점수',
+        line=dict(color='orange', width=2),
+        marker=dict(size=6)
+    ))
+    fig3.update_layout(
+        title="분석 기간별 평균 안정성 점수",
+        xaxis_title="분석 기간 (일)",
+        yaxis_title="평균 안정성 점수",
+        height=400
+    )
+    
+    # 4. 안정성 점수 히트맵 (이동평균 vs 분석기간)
+    # 피벗 테이블 생성
+    pivot_data = stability_results.pivot_table(
+        values='stability_score',
+        index='ma_period',
+        columns='analysis_days',
+        aggfunc='mean'
+    )
+    
+    fig4 = go.Figure(data=go.Heatmap(
+        z=pivot_data.values,
+        x=pivot_data.columns,
+        y=pivot_data.index,
+        colorscale='RdYlGn',
+        text=np.round(pivot_data.values, 1),
+        texttemplate="%{text}",
+        textfont={"size": 8},
+        colorbar=dict(title="안정성 점수")
+    ))
+    fig4.update_layout(
+        title="안정성 점수 히트맵 (이동평균 기간 vs 분석 기간)",
+        xaxis_title="분석 기간 (일)",
+        yaxis_title="이동평균 기간 (일)",
+        height=500
+    )
+    
+    return fig1, fig2, fig3, fig4
+
+def create_performance_scatter(stability_results):
+    """성과 지표 산점도 차트 생성"""
+    if stability_results.empty:
+        return None
+    
+    # 수익률 vs 위험(최대낙폭) 산점도
+    fig = go.Figure()
+    
+    # 안정성 점수에 따라 색상 구분
+    fig.add_trace(go.Scatter(
+        x=stability_results['max_drawdown'],
+        y=stability_results['annual_return'],
+        mode='markers',
+        marker=dict(
+            color=stability_results['stability_score'],
+            colorscale='RdYlGn',
+            size=8,
+            colorbar=dict(title="안정성 점수"),
+            line=dict(width=1, color='black')
+        ),
+        text=[f"이평: {row['ma_period']}일<br>기간: {row['analysis_days']}일<br>안정성: {row['stability_score']:.1f}" 
+              for _, row in stability_results.iterrows()],
+        hovertemplate='%{text}<br>연수익률: %{y:.2f}%<br>최대낙폭: %{x:.2f}%<extra></extra>',
+        name='전략 조합'
+    ))
+    
+    fig.update_layout(
+        title="위험-수익률 분석 (최대낙폭 vs 연평균 수익률)",
+        xaxis_title="최대낙폭 (%)",
+        yaxis_title="연평균 수익률 (%)",
+        height=500
+    )
+    
+    return fig
+
 # 메인 앱
 def main():
     st.title("📈 이동평균선 백테스팅 분석기")
@@ -461,6 +581,41 @@ def main():
                                         '최대낙폭(%)', '안정성점수']
                     display_df = display_df.round(2)
                     st.dataframe(display_df, use_container_width=True)
+                    
+                    # 안정성 분석 시각화
+                    st.subheader("📈 안정성 분석 시각화")
+                    
+                    # 차트 생성
+                    hist_chart, ma_chart, period_chart, heatmap_chart = create_stability_charts(stability_results)
+                    scatter_chart = create_performance_scatter(stability_results)
+                    
+                    # 차트를 탭으로 구분하여 표시
+                    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 점수 분포", "📈 이평기간별", "📅 분석기간별", "🔥 히트맵", "💎 위험-수익률"])
+                    
+                    with tab1:
+                        if hist_chart:
+                            st.plotly_chart(hist_chart, use_container_width=True)
+                            st.info("안정성 점수의 전체적인 분포를 확인할 수 있습니다. 높은 점수일수록 안정적인 전략입니다.")
+                    
+                    with tab2:
+                        if ma_chart:
+                            st.plotly_chart(ma_chart, use_container_width=True)
+                            st.info("이동평균 기간별로 평균 안정성 점수를 보여줍니다. 최적의 이동평균 기간을 찾는데 도움이 됩니다.")
+                    
+                    with tab3:
+                        if period_chart:
+                            st.plotly_chart(period_chart, use_container_width=True)
+                            st.info("분석 기간별로 평균 안정성 점수를 보여줍니다. 어떤 기간에서 전략이 더 효과적인지 확인할 수 있습니다.")
+                    
+                    with tab4:
+                        if heatmap_chart:
+                            st.plotly_chart(heatmap_chart, use_container_width=True)
+                            st.info("이동평균 기간과 분석 기간의 조합별 안정성 점수를 한눈에 볼 수 있습니다. 진한 녹색일수록 높은 점수입니다.")
+                    
+                    with tab5:
+                        if scatter_chart:
+                            st.plotly_chart(scatter_chart, use_container_width=True)
+                            st.info("위험(최대낙폭) 대비 수익률을 보여주는 산점도입니다. 좌상단에 위치할수록 저위험 고수익 전략입니다.")
                     
                     # 최고 안정성 조합 상세 분석
                     best_combo = stability_sorted.iloc[0]
