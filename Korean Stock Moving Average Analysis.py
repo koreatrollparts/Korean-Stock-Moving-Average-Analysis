@@ -256,35 +256,54 @@ def create_price_chart(data, ma_period=None):
     
     return fig
 
-def create_returns_chart(data):
-    """수익률 비교 차트 생성"""
+def create_returns_chart(data, ma_period=None):
+    """수익률 비교 차트 생성 (이동평균선 계산 가능 시점부터)"""
     if 'Cumulative_Strategy_Return' not in data.columns:
         return None
     
-    # 시장 수익률 계산
-    data['Market_Return'] = (data['Close'] / data['Close'].iloc[0]) - 1
+    # 이동평균선이 계산된 시점부터의 데이터만 사용
+    if ma_period and f'MA{ma_period}' in data.columns:
+        # 이동평균선이 계산된 유효한 데이터만 필터링
+        valid_data = data.dropna(subset=[f'MA{ma_period}']).copy()
+        
+        if len(valid_data) < 2:
+            return None
+            
+        # 이동평균선 계산 가능 시점을 시작점으로 하는 매수보유 수익률 계산
+        start_price = valid_data['Close'].iloc[0]
+        valid_data['Market_Return'] = (valid_data['Close'] / start_price) - 1
+        
+        # 전략 수익률도 같은 시점부터 시작하도록 재조정
+        strategy_start_cumulative = valid_data['Cumulative_Strategy_Return'].iloc[0]
+        valid_data['Adjusted_Strategy_Return'] = ((1 + valid_data['Cumulative_Strategy_Return']) / (1 + strategy_start_cumulative)) - 1
+    else:
+        # 이동평균선 정보가 없으면 전체 기간 사용
+        valid_data = data.copy()
+        valid_data['Market_Return'] = (valid_data['Close'] / valid_data['Close'].iloc[0]) - 1
+        valid_data['Adjusted_Strategy_Return'] = valid_data['Cumulative_Strategy_Return']
     
     fig = go.Figure()
     
     fig.add_trace(go.Scatter(
-        x=data.index,
-        y=data['Cumulative_Strategy_Return'] * 100,
+        x=valid_data.index,
+        y=valid_data['Adjusted_Strategy_Return'] * 100,
         name='전략 수익률',
-        line=dict(color='blue')
+        line=dict(color='blue', width=2)
     ))
     
     fig.add_trace(go.Scatter(
-        x=data.index,
-        y=data['Market_Return'] * 100,
+        x=valid_data.index,
+        y=valid_data['Market_Return'] * 100,
         name='매수보유 수익률',
-        line=dict(color='red')
+        line=dict(color='red', width=2)
     ))
     
     fig.update_layout(
-        title="전략 vs 매수보유 수익률 비교",
+        title="전략 vs 매수보유 수익률 비교 (동일 시작점 기준)",
         xaxis_title="날짜",
         yaxis_title="수익률 (%)",
-        height=400
+        height=400,
+        hovermode='x unified'
     )
     
     return fig
@@ -576,7 +595,7 @@ def main():
                     price_chart = create_price_chart(chart_data, best_ma)
                     st.plotly_chart(price_chart, use_container_width=True)
                     
-                    returns_chart = create_returns_chart(chart_data)
+                    returns_chart = create_returns_chart(chart_data, best_ma)
                     if returns_chart:
                         st.plotly_chart(returns_chart, use_container_width=True)
             
@@ -726,23 +745,51 @@ def main():
                 selected_ma = int(selected_combo['ma_period'])
                 selected_result = backtest_ma_strategy(selected_period_data, selected_ma, config['selling_fee'])
                 
-                # 메트릭 표시
+                # 이동평균선 계산 가능 시점부터 매수보유 수익률 재계산
+                strategy_data = selected_result['data']
+                valid_ma_data = strategy_data.dropna(subset=[f'MA{selected_ma}'])
+                
+                if len(valid_ma_data) >= 2:
+                    # 이동평균선 전략과 같은 시점부터 매수보유 수익률 계산
+                    strategy_start_price = valid_ma_data['Close'].iloc[0]
+                    strategy_end_price = valid_ma_data['Close'].iloc[-1]
+                    strategy_period_days = len(valid_ma_data)
+                    
+                    recalculated_market_return = ((strategy_end_price - strategy_start_price) / strategy_start_price) * 100
+                    
+                    if strategy_period_days >= 365:
+                        recalculated_market_annual = (((strategy_end_price / strategy_start_price) ** (365.25 / strategy_period_days)) - 1) * 100
+                    else:
+                        recalculated_market_annual = recalculated_market_return
+                else:
+                    # 유효한 데이터가 부족한 경우 기존 값 사용
+                    recalculated_market_return = selected_combo['market_return']
+                    recalculated_market_annual = selected_combo['market_annual_return']
+                
+                # 메트릭 표시 (재계산된 매수보유 수익률 사용)
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("이동평균선", f"{selected_combo['ma_period']:.0f}일")
-                    st.metric("총수익률", f"{selected_combo['final_return']:.2f}%")
+                    st.metric("전략 총수익률", f"{selected_combo['final_return']:.2f}%")
                 with col2:
                     st.metric("분석기간", f"{selected_combo['analysis_days']:.0f}일")
-                    st.metric("연평균수익률", f"{selected_combo['annual_return']:.2f}%")
+                    st.metric("전략 연평균", f"{selected_combo['annual_return']:.2f}%")
                 with col3:
+                    st.metric("매수보유 총수익률", f"{recalculated_market_return:.2f}%")
+                    st.metric("매수보유 연평균", f"{recalculated_market_annual:.2f}%")
+                with col4:
                     st.metric("샤프비율", f"{selected_combo['sharpe_ratio']:.3f}")
                     st.metric("최대낙폭", f"{selected_combo['max_drawdown']:.2f}%")
-                with col4:
+                
+                # 추가 정보 표시
+                col5, col6 = st.columns(2)
+                with col5:
                     st.metric("총 매매횟수", f"{selected_combo['total_trades']:.0f}회")
+                with col6:
                     st.metric("안정성점수", f"{selected_combo['stability_score']:.1f}/100")
                 
-                # 초과수익률 계산
-                excess_return = selected_combo['final_return'] - selected_combo['market_return']
+                # 초과수익률 계산 (재계산된 매수보유 수익률 기준)
+                excess_return = selected_combo['final_return'] - recalculated_market_return
                 st.info(f"**🎯 전략 초과수익률:** {excess_return:.2f}%p")
                 
                 # 차트 표시
@@ -755,7 +802,7 @@ def main():
                 
                 # 수익률 비교 차트
                 st.write("**📈 전략 vs 매수보유 수익률 비교**")
-                returns_chart = create_returns_chart(chart_data)
+                returns_chart = create_returns_chart(chart_data, selected_ma)
                 if returns_chart:
                     st.plotly_chart(returns_chart, use_container_width=True)
     
