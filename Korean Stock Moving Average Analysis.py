@@ -414,7 +414,7 @@ def main():
                     top_10 = results_df.nlargest(10, 'stability_score')
                     
                     # 최고 수익률 표시
-                    st.info(f"📈 **최고 총수익률:** {best_return['ma_period']:.0f}일 이동평균 - {best_return['final_return']:.2f}%")
+                    st.info(f"📈 **최고 총수익률:** {best_return['ma_period']:.0f}일 이동평균 : {best_return['final_return']:.2f}%")
                     
                     # 상위 10개 결과 표시
                     st.write("**🎯 종합 안정성 점수 상위 10개**")
