@@ -168,11 +168,23 @@ def analyze_stability(data, config, progress_bar):
             actual_end_date = period_data.index[-1]
             actual_days = len(period_data)
             
-            # 시장 수익률 계산
-            period_market_return = ((period_data['Close'].iloc[-1] / period_data['Close'].iloc[0]) - 1) * 100
+            # 이동평균선이 계산되어 실제 매매가 가능한 시점부터 매수보유 수익률 계산
+            # 이동평균선 계산 후 첫 번째 유효한 시점 찾기
+            strategy_data = result['data']
+            valid_ma_data = strategy_data.dropna(subset=[f'MA{ma_period}'])
             
-            if actual_days >= 365:
-                period_market_annual = (((period_data['Close'].iloc[-1] / period_data['Close'].iloc[0]) ** (365.25 / actual_days)) - 1) * 100
+            if len(valid_ma_data) < 2:  # 유효한 데이터가 부족하면 스킵
+                continue
+                
+            # 이동평균선 전략과 같은 시점부터 매수보유 수익률 계산
+            strategy_start_price = valid_ma_data['Close'].iloc[0]
+            strategy_end_price = valid_ma_data['Close'].iloc[-1]
+            strategy_period_days = len(valid_ma_data)
+            
+            period_market_return = ((strategy_end_price - strategy_start_price) / strategy_start_price) * 100
+            
+            if strategy_period_days >= 365:
+                period_market_annual = (((strategy_end_price / strategy_start_price) ** (365.25 / strategy_period_days)) - 1) * 100
             else:
                 period_market_annual = period_market_return
             
