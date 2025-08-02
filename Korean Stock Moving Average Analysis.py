@@ -671,7 +671,7 @@ def main():
             # 상위 15개 결과 표시
             st.subheader("🎯 저장된 안정성 분석 결과")
             st.write("**📊 종합 안정성 점수 순위 (상위 15개)**")
-            st.write("💡 표에서 행을 클릭하면 해당 조합의 상세 차트를 확인할 수 있습니다.")
+            st.write("💡 아래 드롭다운에서 분석하고 싶은 조합을 선택하세요.")
             
             top_15 = stability_sorted.head(15)
             display_cols = ['ma_period', 'analysis_days', 'actual_days', 'start_date', 'end_date', 
@@ -683,74 +683,32 @@ def main():
                                 '최대낙폭(%)', '안정성점수']
             display_df = display_df.round(2)
             
-            # 선택 가능한 데이터프레임 (rerun 제거)
-            try:
-                selected_rows = st.dataframe(
-                    display_df, 
-                    use_container_width=True,
-                    selection_mode="single-row"
-                )
+            # 데이터프레임 표시
+            st.dataframe(display_df, use_container_width=True)
+            
+            # 조합 선택을 위한 selectbox
+            combo_options = []
+            for idx, row in top_15.iterrows():
+                option_text = f"순위 {len(combo_options)+1}: {row['ma_period']:.0f}일 이평선 / {row['analysis_days']:.0f}일 기간 (안정성: {row['stability_score']:.1f})"
+                combo_options.append(option_text)
+            
+            selected_combo_text = st.selectbox(
+                "🔍 상세 분석할 조합을 선택하세요:",
+                options=["선택하지 않음"] + combo_options,
+                index=0
+            )
+            
+            # 선택된 조합에 대한 상세 분석
+            if selected_combo_text != "선택하지 않음":
+                selected_idx = combo_options.index(selected_combo_text)
+                selected_combo = top_15.iloc[selected_idx]
                 
-                # 선택된 행이 있을 때 상세 차트 표시
-                if (hasattr(selected_rows, 'selection') and 
-                    selected_rows.selection and 
-                    hasattr(selected_rows.selection, 'rows') and 
-                    selected_rows.selection.rows):
-                    
-                    selected_idx = selected_rows.selection.rows[0]
-                    selected_combo = top_15.iloc[selected_idx]
-                    
-                    st.subheader(f"📈 선택된 조합 상세 분석 ({selected_combo['ma_period']:.0f}일 이동평균, {selected_combo['analysis_days']:.0f}일 기간)")
-                    
-                    # 선택된 조합의 기간 데이터 추출
-                    end_date_combo = data.index[-1]
-                    start_date_combo = end_date_combo - pd.Timedelta(days=selected_combo['analysis_days'])
-                    selected_period_data = data[data.index >= start_date_combo].copy()
-                    
-                    # 선택된 조합으로 백테스팅 실행
-                    selected_ma = int(selected_combo['ma_period'])
-                    selected_result = backtest_ma_strategy(selected_period_data, selected_ma, config['selling_fee'])
-                    
-                    # 메트릭 표시
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("이동평균선", f"{selected_combo['ma_period']:.0f}일")
-                        st.metric("총수익률", f"{selected_combo['final_return']:.2f}%")
-                    with col2:
-                        st.metric("분석기간", f"{selected_combo['analysis_days']:.0f}일")
-                        st.metric("연평균수익률", f"{selected_combo['annual_return']:.2f}%")
-                    with col3:
-                        st.metric("샤프비율", f"{selected_combo['sharpe_ratio']:.3f}")
-                        st.metric("최대낙폭", f"{selected_combo['max_drawdown']:.2f}%")
-                    with col4:
-                        st.metric("총 매매횟수", f"{selected_combo['total_trades']:.0f}회")
-                        st.metric("안정성점수", f"{selected_combo['stability_score']:.1f}/100")
-                    
-                    # 초과수익률 계산
-                    excess_return = selected_combo['final_return'] - selected_combo['market_return']
-                    st.info(f"**🎯 전략 초과수익률:** {excess_return:.2f}%p")
-                    
-                    # 차트 표시
-                    chart_data = selected_result['data']
-                    
-                    # 가격 및 이동평균선 차트
-                    st.write("**📊 주가 및 이동평균선 차트**")
-                    price_chart = create_price_chart(chart_data, selected_ma)
-                    st.plotly_chart(price_chart, use_container_width=True)
-                    
-                    # 수익률 비교 차트
-                    st.write("**📈 전략 vs 매수보유 수익률 비교**")
-                    returns_chart = create_returns_chart(chart_data)
-                    if returns_chart:
-                        st.plotly_chart(returns_chart, use_container_width=True)
-                        
-            except AttributeError as e:
-                # 선택 기능이 지원되지 않는 경우 일반 데이터프레임으로 표시
-                st.dataframe(display_df, use_container_width=True)
-                st.info("💡 행 선택 기능을 사용할 수 없습니다. 위의 표에서 원하는 조합을 확인하세요.")
-            except Exception as e:
-                st.error(f"데이터프레임 표시 중 오류가 발생했습니다: {str(e)}")
-                st.dataframe(display_df, use_container_width=True)
+                st.subheader(f"📈 선택된 조합 상세 분석 ({selected_combo['ma_period']:.0f}일 이동평균, {selected_combo['analysis_days']:.0f}일 기간)")
+                
+                # 선택된 조합의 기간 데이터 추출
+                end_date_combo = data.index[-1]
+                start_date_combo = end_date_combo - pd.Timedelta(days=selected_combo['analysis_days'])
+                selected_period_data = data[data.index >= start_date_combo].copy()
                 
                 # 선택된 조합으로 백테스팅 실행
                 selected_ma = int(selected_combo['ma_period'])
