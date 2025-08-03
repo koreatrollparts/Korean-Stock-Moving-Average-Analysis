@@ -506,47 +506,62 @@ def main():
     
     # 기본 설정
     st.sidebar.subheader("기본 정보")
-    ticker = st.sidebar.text_input("종목 티커", value="005930", help="예: 삼성전자 - 005930")
-    
+    ticker = st.sidebar.text_input("종목 티커", value=st.session_state.get("ticker", "005930"), help="예: 삼성전자 - 005930")
+    st.session_state.ticker = ticker
+
     # 종목명 표시
     if ticker:
         stock_name = get_stock_name(ticker, st.session_state.stock_list)
         st.sidebar.info(f"**종목명:** {stock_name}")
-    
-    selling_fee = st.sidebar.number_input("매도 수수료 (%)", value=0.20, min_value=0.0, max_value=5.0, step=0.01)
-    
+
+    selling_fee = st.sidebar.number_input("매도 수수료 (%)", value=st.session_state.get("selling_fee", 0.20), min_value=0.0, max_value=5.0, step=0.01)
+    st.session_state.selling_fee = selling_fee
+
     # 기간 설정
     st.sidebar.subheader("분석 기간")
-    start_date = st.sidebar.date_input("시작일", value=datetime(2024, 1, 1))
-    end_date = st.sidebar.date_input("종료일", value=datetime.now())
-    
+    start_date = st.sidebar.date_input("시작일", value=st.session_state.get("start_date", datetime(2024, 1, 1)))
+    end_date = st.sidebar.date_input("종료일", value=st.session_state.get("end_date", datetime.now()))
+    st.session_state.start_date = start_date
+    st.session_state.end_date = end_date
+
     # 이동평균선 최적화 설정
     st.sidebar.subheader("이동평균선 최적화")
-    enable_ma_optimization = st.sidebar.checkbox("이동평균선 최적화 실행", value=True)
-    
+    enable_ma_optimization = st.sidebar.checkbox("이동평균선 최적화 실행", value=st.session_state.get("enable_ma_optimization", True))
+    st.session_state.enable_ma_optimization = enable_ma_optimization
+
     if enable_ma_optimization:
-        ma_start = st.sidebar.number_input("시작일수", value=2, min_value=1, max_value=500)
-        ma_end = st.sidebar.number_input("종료일수", value=120, min_value=2, max_value=500)
+        ma_start = st.sidebar.number_input("시작일수", value=st.session_state.get("ma_start", 2), min_value=1, max_value=500)
+        ma_end = st.sidebar.number_input("종료일수", value=st.session_state.get("ma_end", 120), min_value=2, max_value=500)
+        st.session_state.ma_start = ma_start
+        st.session_state.ma_end = ma_end
     else:
         ma_start, ma_end = 2, 120
-    
+
     # 안정성 분석 설정
     st.sidebar.subheader("종합 안정성 분석")
-    enable_stability_analysis = st.sidebar.checkbox("종합 안정성 분석 실행", value=True)
-    
+    enable_stability_analysis = st.sidebar.checkbox("종합 안정성 분석 실행", value=st.session_state.get("enable_stability_analysis", True))
+    st.session_state.enable_stability_analysis = enable_stability_analysis
+
     if enable_stability_analysis:
-        min_trades = st.sidebar.number_input("최소 매매횟수", value=9, min_value=1, max_value=100)
-        
+        min_trades = st.sidebar.number_input("최소 매매횟수", value=st.session_state.get("min_trades", 9), min_value=1, max_value=100)
+        st.session_state.min_trades = min_trades
+
         col1, col2 = st.sidebar.columns(2)
         with col1:
-            stability_ma_start = st.number_input("이평선 시작", value=5, min_value=1, max_value=500)
-            stability_period_start = st.number_input("기간 시작(일)", value=60, min_value=30, max_value=2000)
+            stability_ma_start = st.number_input("이평선 시작", value=st.session_state.get("stability_ma_start", 5), min_value=1, max_value=500)
+            stability_period_start = st.number_input("기간 시작(일)", value=st.session_state.get("stability_period_start", 60), min_value=30, max_value=2000)
+            st.session_state.stability_ma_start = stability_ma_start
+            st.session_state.stability_period_start = stability_period_start
         with col2:
-            stability_ma_end = st.number_input("이평선 종료", value=240, min_value=2, max_value=500)
-            stability_period_end = st.number_input("기간 종료(일)", value=720, min_value=60, max_value=2000)
-        
-        stability_ma_step = st.sidebar.number_input("이평선 간격", value=5, min_value=1, max_value=50)
-        stability_period_step = st.sidebar.number_input("기간 간격(일)", value=10, min_value=1, max_value=100)
+            stability_ma_end = st.number_input("이평선 종료", value=st.session_state.get("stability_ma_end", 240), min_value=2, max_value=500)
+            stability_period_end = st.number_input("기간 종료(일)", value=st.session_state.get("stability_period_end", 720), min_value=60, max_value=2000)
+            st.session_state.stability_ma_end = stability_ma_end
+            st.session_state.stability_period_end = stability_period_end
+
+        stability_ma_step = st.sidebar.number_input("이평선 간격", value=st.session_state.get("stability_ma_step", 5), min_value=1, max_value=50)
+        stability_period_step = st.sidebar.number_input("기간 간격(일)", value=st.session_state.get("stability_period_step", 10), min_value=1, max_value=100)
+        st.session_state.stability_ma_step = stability_ma_step
+        st.session_state.stability_period_step = stability_period_step
     else:
         min_trades = 9
         stability_ma_start, stability_ma_end, stability_ma_step = 5, 240, 5
