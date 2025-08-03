@@ -83,8 +83,24 @@ def backtest_ma_strategy(data, ma_period, selling_fee):
         if df['Signal'].iloc[i] == -1:
             df.loc[df.index[i], 'Strategy_Return_with_Fee'] = df['Strategy_Return'].iloc[i] - selling_fee
     
-    # 누적 수익률 계산
-    df['Cumulative_Strategy_Return'] = (1 + df['Strategy_Return_with_Fee']).cumprod() - 1
+    # 누적 수익률 계산 (포지션 0일 때도 기존 수익률 유지)
+    cumulative_value = 1.0
+    cumulative_returns = []
+    
+    for i in range(len(df)):
+        if i == 0:
+            cumulative_returns.append(0.0)
+            continue
+            
+        daily_strategy_return = df['Strategy_Return_with_Fee'].iloc[i]
+        
+        # 포지션이 있을 때만 수익률 적용, 없을 때는 기존 가치 유지
+        if not pd.isna(daily_strategy_return):
+            cumulative_value *= (1 + daily_strategy_return)
+        
+        cumulative_returns.append(cumulative_value - 1)
+    
+    df['Cumulative_Strategy_Return'] = cumulative_returns
     
     # 성과 지표 계산
     final_return = df['Cumulative_Strategy_Return'].iloc[-1] * 100
@@ -293,26 +309,64 @@ def create_returns_chart(data, ma_period=None):
     
     fig = go.Figure()
     
+    # 전략 수익률 라인
     fig.add_trace(go.Scatter(
         x=valid_data.index,
         y=valid_data['Adjusted_Strategy_Return'] * 100,
         name='전략 수익률',
-        line=dict(color='blue', width=2)
+        line=dict(color='blue', width=2),
+        hovertemplate='날짜: %{x}<br>전략 수익률: %{y:.2f}%<extra></extra>'
     ))
     
+    # 매수보유 수익률 라인
     fig.add_trace(go.Scatter(
         x=valid_data.index,
         y=valid_data['Market_Return'] * 100,
         name='매수보유 수익률',
-        line=dict(color='red', width=2)
+        line=dict(color='red', width=2),
+        hovertemplate='날짜: %{x}<br>매수보유 수익률: %{y:.2f}%<extra></extra>'
     ))
+    
+    # 포지션 상태 표시 (배경색으로)
+    if ma_period and 'Position' in valid_data.columns:
+        # 매수 구간 (포지션 1)을 연한 파란색 배경으로 표시
+        position_changes = valid_data['Position'].diff().fillna(0)
+        buy_points = valid_data[position_changes > 0].index
+        sell_points = valid_data[position_changes < 0].index
+        
+        # 매수/매도 신호 점으로 표시
+        if len(buy_points) > 0:
+            fig.add_trace(go.Scatter(
+                x=buy_points,
+                y=valid_data.loc[buy_points, 'Adjusted_Strategy_Return'] * 100,
+                mode='markers',
+                marker=dict(color='green', size=8, symbol='triangle-up'),
+                name='매수 신호',
+                hovertemplate='매수: %{x}<br>수익률: %{y:.2f}%<extra></extra>'
+            ))
+        
+        if len(sell_points) > 0:
+            fig.add_trace(go.Scatter(
+                x=sell_points,
+                y=valid_data.loc[sell_points, 'Adjusted_Strategy_Return'] * 100,
+                mode='markers',
+                marker=dict(color='red', size=8, symbol='triangle-down'),
+                name='매도 신호',
+                hovertemplate='매도: %{x}<br>수익률: %{y:.2f}%<extra></extra>'
+            ))
     
     fig.update_layout(
         title="전략 vs 매수보유 수익률 비교 (동일 시작점 기준)",
         xaxis_title="날짜",
         yaxis_title="수익률 (%)",
-        height=400,
-        hovermode='x unified'
+        height=500,
+        hovermode='x unified',
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        )
     )
     
     return fig
