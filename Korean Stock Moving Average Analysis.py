@@ -177,9 +177,18 @@ def analyze_stability(data, config, progress_bar):
                 continue
                 
             # 이동평균선 전략과 같은 시점부터 매수보유 수익률 계산
-            strategy_start_price = valid_ma_data['Close'].iloc[0]
-            strategy_end_price = valid_ma_data['Close'].iloc[-1]
-            strategy_period_days = len(valid_ma_data)
+            # 실제 매매 신호가 발생할 수 있는 첫 번째 시점부터 계산 (ma_period + 1일째)
+            if len(valid_ma_data) > ma_period:
+                # 이동평균선이 충분히 안정화된 시점부터 계산
+                strategy_start_idx = ma_period
+                strategy_start_price = valid_ma_data['Close'].iloc[strategy_start_idx]
+                strategy_end_price = valid_ma_data['Close'].iloc[-1]
+                strategy_period_days = len(valid_ma_data) - strategy_start_idx
+            else:
+                # 데이터가 부족한 경우 첫 번째 유효한 시점부터 계산
+                strategy_start_price = valid_ma_data['Close'].iloc[0]
+                strategy_end_price = valid_ma_data['Close'].iloc[-1]
+                strategy_period_days = len(valid_ma_data)
             
             period_market_return = ((strategy_end_price - strategy_start_price) / strategy_start_price) * 100
             
@@ -623,12 +632,13 @@ def main():
                                   'max_drawdown', 'stability_score']
                     display_df = top_15[display_cols].copy()
                     display_df.columns = ['이평일수', '분석기간', '실제일수', '시작일', '종료일', 
-                                        '전략총수익(%)', '전략연수익(%)', '매수보유총(%)', '샤프비율', 
+                                        '전략총수익(%)', '전략연수익(%)', '매수보유수익(%)*', '샤프비율', 
                                         '최대낙폭(%)', '안정성점수']
                     display_df = display_df.round(2)
                     
                     # 일반 데이터프레임 표시 (선택 기능 없음)
                     st.dataframe(display_df, use_container_width=True)
+                    st.caption("* 매수보유수익(%)는 이동평균선 계산 가능 시점부터의 수익률입니다.")
                     
                     # 안정성 분석 시각화
                     st.subheader("📈 안정성 분석 시각화")
@@ -710,12 +720,13 @@ def main():
                           'max_drawdown', 'stability_score']
             display_df = top_15[display_cols].copy()
             display_df.columns = ['이평일수', '분석기간', '실제일수', '시작일', '종료일', 
-                                '전략총수익(%)', '전략연수익(%)', '매수보유총(%)', '샤프비율', 
+                                '전략총수익(%)', '전략연수익(%)', '매수보유수익(%)*', '샤프비율', 
                                 '최대낙폭(%)', '안정성점수']
             display_df = display_df.round(2)
             
             # 데이터프레임 표시
             st.dataframe(display_df, use_container_width=True)
+            st.caption("* 매수보유수익(%)는 각 이동평균선의 계산 가능 시점부터의 수익률입니다.")
             
             # 조합 선택을 위한 selectbox
             combo_options = []
